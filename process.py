@@ -54,7 +54,12 @@ RAW_KEYS = [
     "QVEuQWI4Uk42TFF4Mk5GcDBNNzg1ZlRSSGdTOG5Oa2NVNERoa2RnTC1xazNIbzFPVVVVZw=="
 ]
 
-API_KEYS = [base64.b64decode(k).decode('utf-8') for k in RAW_KEYS]
+# Fetch secret key first, fallback to rotation keys
+SECRET_KEY = os.environ.get("GEMINI_API_KEY")
+if SECRET_KEY:
+    API_KEYS = [SECRET_KEY] + [base64.b64decode(k).decode('utf-8') for k in RAW_KEYS]
+else:
+    API_KEYS = [base64.b64decode(k).decode('utf-8') for k in RAW_KEYS]
 
 # Header HTML
 st.markdown("""
@@ -107,9 +112,10 @@ if uploaded_file is not None:
             last_err = None
             used_key_index = None
 
-            # Rotation Mechanism for Enterprise Keys
+            # Rotation Mechanism for Enterprise / Developer Keys
             for idx, key in enumerate(API_KEYS):
                 try:
+                    os.environ["GEMINI_API_KEY"] = key
                     genai.configure(api_key=key)
                     model = genai.GenerativeModel('gemini-1.5-flash')
                     res = model.generate_content([prompt, image])
