@@ -3,7 +3,7 @@ import json
 import glob
 from datetime import datetime
 from PIL import Image
-from google import genai
+import google.generativeai as genai
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
