@@ -10,7 +10,7 @@ import streamlit as st
 st.set_page_config(page_title="QC Invoice Scanner", page_icon="📱", layout="centered")
 
 st.title("📱 QC Invoice Scanner")
-st.write("Phone ya PC se image upload karein aur Google Sheets mein auto-process karein.")
+st.write("Phone se direct Photo khinchein ya Gallery se select karke Google Sheet mein bhejain.")
 
 @st.cache_resource
 def get_gsheet():
@@ -22,14 +22,24 @@ def get_gsheet():
 
 gemini_client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
-uploaded_file = st.file_uploader("Image Select ya Camera se Capture Karein", type=["jpg", "jpeg", "png"])
+# Option Selection: Camera ya Gallery
+option = st.radio("Choose Input Method:", ("📷 Direct Camera", "📁 Gallery File Upload"))
 
-if uploaded_file is not None:
-    image = Image.open(uploaded_file)
-    st.image(image, caption="Uploaded Image", use_container_width=True)
-    
+image = None
+
+if option == "📷 Direct Camera":
+    camera_file = st.camera_input("Take a photo")
+    if camera_file:
+        image = Image.open(camera_file)
+else:
+    uploaded_file = st.file_uploader("Choose file", type=["jpg", "jpeg", "png"])
+    if uploaded_file:
+        image = Image.open(uploaded_file)
+        st.image(image, caption="Uploaded Image", use_container_width=True)
+
+if image is not None:
     if st.button("🚀 Process & Save to Sheets", type="primary"):
-        with st.spinner("Handwritten items ko read kar rahe hain..."):
+        with st.spinner("Processing image..."):
             try:
                 prompt = """
                 Extract all lines from this handwritten QC sheet into a JSON ARRAY of objects.
@@ -66,13 +76,10 @@ if uploaded_file is not None:
                         item.get("SHORT_QTY", "")
                     ])
                 
-                # Column A ki filled rows count karke next exact line calculate karna
                 next_row = len(sheet.col_values(1)) + 1
-                
-                # Filled data ke just niche append karein
                 sheet.insert_rows(rows_to_add, row=next_row)
                 
-                st.success(f"✅ Data filled row ke just niche (Row {next_row}) save ho gaya hai!")
+                st.success(f"✅ Data added directly under Row {next_row}!")
                 st.json(items)
                 
             except Exception as e:
