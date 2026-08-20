@@ -48,7 +48,6 @@ if uploaded_file is not None:
                 clean_text = response.text.strip().replace("```json", "").replace("```", "")
                 parsed_data = json.loads(clean_text)
                 
-                # Handle single dict or list of dicts
                 items = parsed_data if isinstance(parsed_data, list) else [parsed_data]
                 
                 sheet = get_gsheet()
@@ -67,8 +66,10 @@ if uploaded_file is not None:
                         item.get("SHORT_QTY", "")
                     ])
                 
-                sheet.append_rows(rows_to_add)
-                st.success(f"✅ Google Sheet mein Total {len(rows_to_add)} rows successfully add ho gayi hain!")
+                # Sheet mein Row 2 (Headers ke turant niche) top par add karne ke liye
+                sheet.insert_rows(rows_to_add, row=2)
+                
+                st.success(f"✅ Google Sheet mein Top par Total {len(rows_to_add)} rows add ho gayi hain!")
                 st.json(items)
                 
             except Exception as e:
