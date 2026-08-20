@@ -7,10 +7,9 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import streamlit as st
 
-st.set_page_config(page_title="QC Invoice Scanner", page_icon="📱", layout="centered")
+st.set_page_config(page_title="QC Invoice Scanner", page_icon="⚡", layout="centered")
 
-st.title("📱 QC Invoice Scanner")
-st.write("Photo select karein aur Google Sheets mein auto-process karein.")
+st.title("⚡ Fast QC Scanner")
 
 @st.cache_resource
 def get_gsheet():
@@ -20,25 +19,29 @@ def get_gsheet():
     gs_client = gspread.authorize(creds)
     return gs_client.open("fress inword qc").sheet1
 
-gemini_client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+@st.cache_resource
+def get_gemini():
+    return genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
-# Single smart uploader: Phone par camera/gallery dono dega, laptop par sirf file browser
+gemini_client = get_gemini()
+sheet = get_gsheet()
+
 uploaded_file = st.file_uploader("Upload Image or Capture Photo", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
     image = Image.open(uploaded_file)
+    
+    # Speed Optimization: Image Resize (Gemini fast process karega)
+    image.thumbnail((1024, 1024))
     st.image(image, caption="Selected Image", use_container_width=True)
     
-    if st.button("🚀 Process & Save to Sheets", type="primary"):
-        with st.spinner("Processing image..."):
+    if st.button("🚀 Process & Save Fast", type="primary"):
+        with st.spinner("Processing..."):
             try:
                 prompt = """
-                Extract all lines from this handwritten QC sheet into a JSON ARRAY of objects.
-                Each item object should have these keys:
-                {"DATE": "YYYY-MM-DD", "INVOICE_NUM": "", "BATCH_NUM": "", "EN_NUM": "", "ALTER_QTY": "", "GOOD_QTY": "", "SHORT_QTY": ""}
-                
-                If specific headers like DATE or INVOICE_NUM are not written, extract whatever codes/numbers you see into EN_NUM or BATCH_NUM and put quantities into GOOD_QTY.
-                Return ONLY raw JSON list, no markdown formatting or codeblocks.
+                Extract all lines into JSON ARRAY:
+                [{"DATE": "", "INVOICE_NUM": "", "BATCH_NUM": "", "EN_NUM": "", "ALTER_QTY": "", "GOOD_QTY": "", "SHORT_QTY": ""}]
+                Return ONLY raw JSON, no markdown.
                 """
                 
                 response = gemini_client.models.generate_content(
@@ -46,17 +49,14 @@ if uploaded_file is not None:
                     contents=[prompt, image]
                 )
                 
-                clean_text = response.text.strip().replace("```json", "").replace("```", "")
+                clean_text = response.text.strip().removeprefix("```json").removesuffix("```").strip()
                 parsed_data = json.loads(clean_text)
                 
                 items = parsed_data if isinstance(parsed_data, list) else [parsed_data]
-                
-                sheet = get_gsheet()
                 timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 
-                rows_to_add = []
-                for item in items:
-                    rows_to_add.append([
+                rows_to_add = [
+                    [
                         timestamp,
                         item.get("DATE", ""),
                         item.get("INVOICE_NUM", ""),
@@ -65,12 +65,15 @@ if uploaded_file is not None:
                         item.get("ALTER_QTY", ""),
                         item.get("GOOD_QTY", ""),
                         item.get("SHORT_QTY", "")
-                    ])
+                    ]
+                    for item in items
+                ]
                 
+                # Fast row position calculation
                 next_row = len(sheet.col_values(1)) + 1
                 sheet.insert_rows(rows_to_add, row=next_row)
                 
-                st.success(f"✅ Data added directly under Row {next_row}!")
+                st.success(f"⚡ Done in seconds! Added {len(rows_to_add)} rows.")
                 st.json(items)
                 
             except Exception as e:
