@@ -1,5 +1,6 @@
 import os
 import json
+import time
 from datetime import datetime
 from PIL import Image
 from google import genai
@@ -12,7 +13,6 @@ st.set_page_config(page_title="Delhivery Smart QC Workstation", page_icon="📦"
 # Custom CSS for Exact UI Matching
 st.markdown("""
     <style>
-    /* Background Page Styling */
     .stApp {
         background-color: #F2F5F9;
     }
@@ -21,8 +21,6 @@ st.markdown("""
         padding-bottom: 2rem;
         max-width: 720px;
     }
-    
-    /* Main Workstation Card */
     .qc-card {
         background-color: #FFFFFF;
         border-radius: 16px;
@@ -31,8 +29,6 @@ st.markdown("""
         border: 1px solid #E6ECF1;
         margin-bottom: 20px;
     }
-    
-    /* Top Header Section */
     .header-container {
         display: flex;
         justify-content: space-between;
@@ -64,8 +60,6 @@ st.markdown("""
         font-size: 12px;
         margin-top: 2px;
     }
-    
-    /* Operator Profile Chip */
     .operator-chip {
         background-color: #F8FAFC;
         border: 1px solid #E2E8F0;
@@ -97,8 +91,6 @@ st.markdown("""
         font-size: 11px;
         color: #64748B;
     }
-    
-    /* Section Title & Status */
     .section-header {
         display: flex;
         justify-content: space-between;
@@ -115,8 +107,6 @@ st.markdown("""
         font-weight: 600;
         font-size: 13px;
     }
-    
-    /* Custom Styling for Streamlit Buttons & Dropdowns */
     div.stButton > button:first-child {
         background-color: #C20E23 !important;
         color: white !important;
@@ -173,8 +163,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Image Uploader Section
-uploaded_file = st.file_uploader("Upload Order / Invoice Photo (Drag & drop photo here or browse)", type=["jpg", "jpeg", "png"])
+uploaded_file = st.file_uploader("Upload Order / Invoice Photo", type=["jpg", "jpeg", "png"])
 
 col1, col2 = st.columns(2)
 with col1:
@@ -188,44 +177,60 @@ if uploaded_file is not None:
     st.image(image, caption="Uploaded Photo Preview", use_container_width=True)
     
     if st.button("⚡ PROCESS & SYNC TO GOOGLE SHEET"):
-        with st.spinner("Processing & Syncing data to Google Sheet..."):
-            try:
-                prompt = """
-                Extract all lines into JSON ARRAY:
-                [{"DATE": "", "INVOICE_NUM": "", "BATCH_NUM": "", "EN_NUM": "", "ALTER_QTY": "", "GOOD_QTY": "", "SHORT_QTY": ""}]
-                Return ONLY raw JSON, no markdown.
-                """
-                
-                response = gemini_client.models.generate_content(
-                    model='gemini-3.6-flash',
-                    contents=[prompt, image]
-                )
-                
-                clean_text = response.text.strip().removeprefix("```json").removesuffix("```").strip()
-                parsed_data = json.loads(clean_text)
-                items = parsed_data if isinstance(parsed_data, list) else [parsed_data]
-                
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                
-                rows_to_add = [
-                    [
-                        timestamp,
-                        item.get("DATE", ""),
-                        item.get("INVOICE_NUM", ""),
-                        item.get("BATCH_NUM", ""),
-                        item.get("EN_NUM", ""),
-                        item.get("ALTER_QTY", ""),
-                        item.get("GOOD_QTY", ""),
-                        item.get("SHORT_QTY", "")
+        with st.spinner("Processing image & Syncing to Google Sheet..."):
+            prompt = """
+            Extract all lines into JSON ARRAY:
+            [{"DATE": "", "INVOICE_NUM": "", "BATCH_NUM": "", "EN_NUM": "", "ALTER_QTY": "", "GOOD_QTY": "", "SHORT_QTY": ""}]
+            Return ONLY raw JSON, no markdown.
+            """
+            
+            # Quota Error Prevention with Multiple Models
+            models_to_try = ['gemini-2.5-flash', 'gemini-1.5-flash']
+            response_text = None
+            
+            for model_name in models_to_try:
+                try:
+                    res = gemini_client.models.generate_content(
+                        model=model_name,
+                        contents=[prompt, image]
+                    )
+                    response_text = res.text
+                    break
+                except Exception as model_err:
+                    if "429" in str(model_err) or "RESOURCE_EXHAUSTED" in str(model_err):
+                        time.sleep(2)
+                        continue
+                    else:
+                        raise model_err
+
+            if response_text:
+                try:
+                    clean_text = response_text.strip().removeprefix("```json").removesuffix("```").strip()
+                    parsed_data = json.loads(clean_text)
+                    items = parsed_data if isinstance(parsed_data, list) else [parsed_data]
+                    
+                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    
+                    rows_to_add = [
+                        [
+                            timestamp,
+                            item.get("DATE", ""),
+                            item.get("INVOICE_NUM", ""),
+                            item.get("BATCH_NUM", ""),
+                            item.get("EN_NUM", ""),
+                            item.get("ALTER_QTY", ""),
+                            item.get("GOOD_QTY", ""),
+                            item.get("SHORT_QTY", "")
+                        ]
+                        for item in items
                     ]
-                    for item in items
-                ]
-                
-                next_row = len(sheet.col_values(1)) + 1
-                sheet.insert_rows(rows_to_add, row=next_row)
-                
-                st.success(f"✅ Successfully extracted and synced {len(rows_to_add)} rows to Google Sheet!")
-                st.json(items)
-                
-            except Exception as e:
-                st.error(f"❌ Error: {e}")
+                    
+                    next_row = len(sheet.col_values(1)) + 1
+                    sheet.insert_rows(rows_to_add, row=next_row)
+                    
+                    st.success(f"✅ Successfully extracted and synced {len(rows_to_add)} rows to Google Sheet!")
+                    st.json(items)
+                except Exception as parse_err:
+                    st.error(f"❌ JSON Parsing Error: {parse_err}")
+            else:
+                st.error("⚠️ Quota Exceeded across all free models. Please wait 1-2 minutes or use a fresh Gemini API Key from Google AI Studio.")
