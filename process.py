@@ -2,9 +2,10 @@ import os
 import json
 import time
 import base64
+import requests
 from datetime import datetime
 from PIL import Image
-import google.generativeai as genai
+import io
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import streamlit as st
@@ -43,7 +44,7 @@ def get_gsheet():
 
 sheet = get_gsheet()
 
-# Base64 Encoded API Keys Array
+# Keys list fallback
 RAW_KEYS = [
     "QVEuQWI4Uk42S0RIUE1NaXc0VjdleEJGcmVOYkZxejdxdFR1R25TS1pVc0UtdF9rNWpPOXc=",
     "QVEuQWI4Uk42S3VDRlNLUi1qUTA3TXdqSHhRazNxTUhqN2dOOC1JbE9OaW5uUDJzQ0YyMUE=",
@@ -54,7 +55,6 @@ RAW_KEYS = [
     "QVEuQWI4Uk42TFF4Mk5GcDBNNzg1ZlRSSGdTOG5Oa2NVNERoa2RnTC1xazNIbzFPVVVVZw=="
 ]
 
-# Fetch secret key first, fallback to rotation keys
 SECRET_KEY = os.environ.get("GEMINI_API_KEY")
 if SECRET_KEY:
     API_KEYS = [SECRET_KEY] + [base64.b64decode(k).decode('utf-8') for k in RAW_KEYS]
@@ -102,28 +102,60 @@ if uploaded_file is not None:
     
     if st.button("⚡ PROCESS & SYNC TO GOOGLE SHEET"):
         with st.spinner("Processing image & Syncing to Google Sheet..."):
-            prompt = """
+            prompt_text = """
             Extract all lines into JSON ARRAY:
             [{"DATE": "", "INVOICE_NUM": "", "BATCH_NUM": "", "EN_NUM": "", "ALTER_QTY": "", "GOOD_QTY": "", "SHORT_QTY": ""}]
             Return ONLY raw JSON, no markdown.
             """
             
+            # Convert PIL image to base64
+            buffered = io.BytesIO()
+            image.save(buffered, format="JPEG")
+            img_bytes = buffered.getvalue()
+            img_b64 = base64.b64encode(img_bytes).decode('utf-8')
+            
             res_text = None
             last_err = None
             used_key_index = None
 
-            # Rotation Mechanism for Enterprise / Developer Keys
+            # Direct REST API Payload for Enterprise/Access Tokens
+            payload = {
+                "contents": [
+                    {
+                        "parts": [
+                            {"text": prompt_text},
+                            {
+                                "inline_data": {
+                                    "mime_type": "image/jpeg",
+                                    "data": img_b64
+                                }
+                            }
+                        ]
+                    }
+                ]
+            }
+
             for idx, key in enumerate(API_KEYS):
                 try:
-                    os.environ["GEMINI_API_KEY"] = key
-                    genai.configure(api_key=key)
-                    model = genai.GenerativeModel('gemini-1.5-flash')
-                    res = model.generate_content([prompt, image])
-                    res_text = res.text
-                    used_key_index = idx + 1
-                    break
+                    # 1. Try URL Query Parameter
+                    url_param = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={key}"
+                    resp = requests.post(url_param, json=payload, timeout=30)
+                    
+                    if resp.status_code != 200:
+                        # 2. Try Authorization Bearer Header (for AQ.Ab8RN6 access tokens)
+                        url_header = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+                        headers = {"Authorization": f"Bearer {key}"}
+                        resp = requests.post(url_header, headers=headers, json=payload, timeout=30)
+                    
+                    if resp.status_code == 200:
+                        res_json = resp.json()
+                        res_text = res_json['candidates'][0]['content']['parts'][0]['text']
+                        used_key_index = idx + 1
+                        break
+                    else:
+                        last_err = f"HTTP {resp.status_code}: {resp.text}"
                 except Exception as err:
-                    last_err = err
+                    last_err = str(err)
                     continue
 
             if res_text:
