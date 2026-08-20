@@ -7,13 +7,11 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import streamlit as st
 
-# Page Configuration
 st.set_page_config(page_title="QC Invoice Scanner", page_icon="📱", layout="centered")
 
 st.title("📱 QC Invoice Scanner")
 st.write("Phone ya PC se image upload karein aur Google Sheets mein auto-process karein.")
 
-# Google Sheets Setup
 @st.cache_resource
 def get_gsheet():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -22,10 +20,8 @@ def get_gsheet():
     gs_client = gspread.authorize(creds)
     return gs_client.open("fress inword qc").sheet1
 
-# Gemini Client Setup
 gemini_client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
-# File Uploader UI for Phone/Browser
 uploaded_file = st.file_uploader("Image Select ya Camera se Capture Karein", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
@@ -33,12 +29,15 @@ if uploaded_file is not None:
     st.image(image, caption="Uploaded Image", use_container_width=True)
     
     if st.button("🚀 Process & Save to Sheets", type="primary"):
-        with st.spinner("Handwritten data ko read karke Google Sheets mein bhej rahe hain..."):
+        with st.spinner("Handwritten items ko read kar rahe hain..."):
             try:
                 prompt = """
-                Extract data from this handwritten list into JSON format:
+                Extract all lines from this handwritten QC sheet into a JSON ARRAY of objects.
+                Each item object should have these keys:
                 {"DATE": "YYYY-MM-DD", "INVOICE_NUM": "", "BATCH_NUM": "", "EN_NUM": "", "ALTER_QTY": "", "GOOD_QTY": "", "SHORT_QTY": ""}
-                Return ONLY raw JSON, no markdown codeblocks.
+                
+                If specific headers like DATE or INVOICE_NUM are not written, extract whatever codes/numbers you see into EN_NUM or BATCH_NUM and put quantities into GOOD_QTY.
+                Return ONLY raw JSON list, no markdown formatting or codeblocks.
                 """
                 
                 response = gemini_client.models.generate_content(
@@ -47,24 +46,30 @@ if uploaded_file is not None:
                 )
                 
                 clean_text = response.text.strip().replace("```json", "").replace("```", "")
-                data = json.loads(clean_text)
+                parsed_data = json.loads(clean_text)
+                
+                # Handle single dict or list of dicts
+                items = parsed_data if isinstance(parsed_data, list) else [parsed_data]
                 
                 sheet = get_gsheet()
                 timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                row = [
-                    timestamp,
-                    data.get("DATE", ""),
-                    data.get("INVOICE_NUM", ""),
-                    data.get("BATCH_NUM", ""),
-                    data.get("EN_NUM", ""),
-                    data.get("ALTER_QTY", ""),
-                    data.get("GOOD_QTY", ""),
-                    data.get("SHORT_QTY", "")
-                ]
                 
-                sheet.append_row(row)
-                st.success("✅ Google Sheet mein Data successfully add ho gaya hai!")
-                st.json(data)
+                rows_to_add = []
+                for item in items:
+                    rows_to_add.append([
+                        timestamp,
+                        item.get("DATE", ""),
+                        item.get("INVOICE_NUM", ""),
+                        item.get("BATCH_NUM", ""),
+                        item.get("EN_NUM", ""),
+                        item.get("ALTER_QTY", ""),
+                        item.get("GOOD_QTY", ""),
+                        item.get("SHORT_QTY", "")
+                    ])
+                
+                sheet.append_rows(rows_to_add)
+                st.success(f"✅ Google Sheet mein Total {len(rows_to_add)} rows successfully add ho gayi hain!")
+                st.json(items)
                 
             except Exception as e:
                 st.error(f"❌ Error: {e}")
