@@ -66,10 +66,13 @@ if uploaded_file is not None:
                         item.get("SHORT_QTY", "")
                     ])
                 
-                # Sheet mein Row 2 (Headers ke turant niche) top par add karne ke liye
-                sheet.insert_rows(rows_to_add, row=2)
+                # Column A ki filled rows count karke next exact line calculate karna
+                next_row = len(sheet.col_values(1)) + 1
                 
-                st.success(f"✅ Google Sheet mein Top par Total {len(rows_to_add)} rows add ho gayi hain!")
+                # Filled data ke just niche append karein
+                sheet.insert_rows(rows_to_add, row=next_row)
+                
+                st.success(f"✅ Data filled row ke just niche (Row {next_row}) save ho gaya hai!")
                 st.json(items)
                 
             except Exception as e:
