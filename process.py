@@ -1,0 +1,51 @@
+import os
+import json
+import glob
+from datetime import datetime
+from PIL import Image
+import google.generativeai as genai
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+
+# 1. Credentials Setup
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds_dict = json.loads(os.environ["GOOGLE_CREDENTIALS"])
+creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+client = gspread.authorize(creds)
+sheet = client.open("fress inword qc").sheet1
+
+genai.configure(api_key=os.environ["GEMINI_API_KEY"])
+model = genai.GenerativeModel('gemini-1.5-flash')
+
+# 2. Check for images in 'images' folder
+image_files = glob.glob('images/*.[jJ][pP][gG]') + glob.glob('images/*.[pP][nN][gG]') + glob.glob('images/*.[jJ][pP][eE][gG]')
+
+for img_path in image_files:
+    try:
+        image = Image.open(img_path)
+        prompt = """
+        Extract data into JSON format:
+        {"DATE": "YYYY-MM-DD", "INVOICE_NUM": "", "BATCH_NUM": "", "EN_NUM": "", "ALTER_QTY": "", "GOOD_QTY": "", "SHORT_QTY": ""}
+        Return ONLY raw JSON, no markdown codeblocks.
+        """
+        response = model.generate_content([prompt, image])
+        clean_text = response.text.strip().replace("```json", "").replace("```", "")
+        data = json.loads(clean_text)
+        
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        row = [
+            timestamp,
+            data.get("DATE", ""),
+            data.get("INVOICE_NUM", ""),
+            data.get("BATCH_NUM", ""),
+            data.get("EN_NUM", ""),
+            data.get("ALTER_QTY", ""),
+            data.get("GOOD_QTY", ""),
+            data.get("SHORT_QTY", "")
+        ]
+        
+        sheet.append_row(row)
+        print(f"Successfully processed: {img_path}")
+        os.remove(img_path)
+    except Exception as e:
+        print(f"Error processing {img_path}: {e}")
