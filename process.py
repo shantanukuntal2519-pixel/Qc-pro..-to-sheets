@@ -30,13 +30,13 @@ uploaded_file = st.file_uploader("Image Select ya Camera se Capture Karein", typ
 
 if uploaded_file is not None:
     image = Image.open(uploaded_file)
-    st.image(image, caption="Uploaded Image", use_column_width=True)
+    st.image(image, caption="Uploaded Image", use_container_width=True)
     
     if st.button("🚀 Process & Save to Sheets", type="primary"):
-        with st.spinner("Gemini image ko read kar raha hai..."):
+        with st.spinner("Handwritten data ko read karke Google Sheets mein bhej rahe hain..."):
             try:
                 prompt = """
-                Extract data into JSON format:
+                Extract data from this handwritten list into JSON format:
                 {"DATE": "YYYY-MM-DD", "INVOICE_NUM": "", "BATCH_NUM": "", "EN_NUM": "", "ALTER_QTY": "", "GOOD_QTY": "", "SHORT_QTY": ""}
                 Return ONLY raw JSON, no markdown codeblocks.
                 """
