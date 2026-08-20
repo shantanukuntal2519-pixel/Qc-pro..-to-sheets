@@ -10,7 +10,7 @@ import streamlit as st
 st.set_page_config(page_title="QC Invoice Scanner", page_icon="📱", layout="centered")
 
 st.title("📱 QC Invoice Scanner")
-st.write("Phone se direct Photo khinchein ya Gallery se select karke Google Sheet mein bhejain.")
+st.write("Photo select karein aur Google Sheets mein auto-process karein.")
 
 @st.cache_resource
 def get_gsheet():
@@ -22,22 +22,13 @@ def get_gsheet():
 
 gemini_client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
-# Option Selection: Camera ya Gallery
-option = st.radio("Choose Input Method:", ("📷 Direct Camera", "📁 Gallery File Upload"))
+# Single smart uploader: Phone par camera/gallery dono dega, laptop par sirf file browser
+uploaded_file = st.file_uploader("Upload Image or Capture Photo", type=["jpg", "jpeg", "png"])
 
-image = None
-
-if option == "📷 Direct Camera":
-    camera_file = st.camera_input("Take a photo")
-    if camera_file:
-        image = Image.open(camera_file)
-else:
-    uploaded_file = st.file_uploader("Choose file", type=["jpg", "jpeg", "png"])
-    if uploaded_file:
-        image = Image.open(uploaded_file)
-        st.image(image, caption="Uploaded Image", use_container_width=True)
-
-if image is not None:
+if uploaded_file is not None:
+    image = Image.open(uploaded_file)
+    st.image(image, caption="Selected Image", use_container_width=True)
+    
     if st.button("🚀 Process & Save to Sheets", type="primary"):
         with st.spinner("Processing image..."):
             try:
