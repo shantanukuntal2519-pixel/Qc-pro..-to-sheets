@@ -184,53 +184,41 @@ if uploaded_file is not None:
             Return ONLY raw JSON, no markdown.
             """
             
-            # Quota Error Prevention with Multiple Models
-            models_to_try = ['gemini-2.5-flash', 'gemini-1.5-flash']
-            response_text = None
-            
-            for model_name in models_to_try:
-                try:
-                    res = gemini_client.models.generate_content(
-                        model=model_name,
-                        contents=[prompt, image]
-                    )
-                    response_text = res.text
-                    break
-                except Exception as model_err:
-                    if "429" in str(model_err) or "RESOURCE_EXHAUSTED" in str(model_err):
-                        time.sleep(2)
-                        continue
-                    else:
-                        raise model_err
-
-            if response_text:
-                try:
-                    clean_text = response_text.strip().removeprefix("```json").removesuffix("```").strip()
-                    parsed_data = json.loads(clean_text)
-                    items = parsed_data if isinstance(parsed_data, list) else [parsed_data]
-                    
-                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    
-                    rows_to_add = [
-                        [
-                            timestamp,
-                            item.get("DATE", ""),
-                            item.get("INVOICE_NUM", ""),
-                            item.get("BATCH_NUM", ""),
-                            item.get("EN_NUM", ""),
-                            item.get("ALTER_QTY", ""),
-                            item.get("GOOD_QTY", ""),
-                            item.get("SHORT_QTY", "")
-                        ]
-                        for item in items
+            try:
+                # Direct Call to standard vision model
+                res = gemini_client.models.generate_content(
+                    model='gemini-1.5-flash',
+                    contents=[prompt, image]
+                )
+                
+                clean_text = res.text.strip().removeprefix("```json").removesuffix("```").strip()
+                parsed_data = json.loads(clean_text)
+                items = parsed_data if isinstance(parsed_data, list) else [parsed_data]
+                
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                
+                rows_to_add = [
+                    [
+                        timestamp,
+                        item.get("DATE", ""),
+                        item.get("INVOICE_NUM", ""),
+                        item.get("BATCH_NUM", ""),
+                        item.get("EN_NUM", ""),
+                        item.get("ALTER_QTY", ""),
+                        item.get("GOOD_QTY", ""),
+                        item.get("SHORT_QTY", "")
                     ]
-                    
-                    next_row = len(sheet.col_values(1)) + 1
-                    sheet.insert_rows(rows_to_add, row=next_row)
-                    
-                    st.success(f"✅ Successfully extracted and synced {len(rows_to_add)} rows to Google Sheet!")
-                    st.json(items)
-                except Exception as parse_err:
-                    st.error(f"❌ JSON Parsing Error: {parse_err}")
-            else:
-                st.error("⚠️ Quota Exceeded across all free models. Please wait 1-2 minutes or use a fresh Gemini API Key from Google AI Studio.")
+                    for item in items
+                ]
+                
+                next_row = len(sheet.col_values(1)) + 1
+                sheet.insert_rows(rows_to_add, row=next_row)
+                
+                st.success(f"✅ Successfully extracted and synced {len(rows_to_add)} rows to Google Sheet!")
+                st.json(items)
+                
+            except Exception as e:
+                if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                    st.warning("⚠️ Daily API limit/Quota exceed ho gayi hai. Kripya 1-2 minute baad dobara try karein ya Google AI Studio se nayi API Key Streamlit Secrets me add karein.")
+                else:
+                    st.error(f"❌ Processing Error: {e}")
