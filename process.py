@@ -184,51 +184,42 @@ if uploaded_file is not None:
             Return ONLY raw JSON, no markdown.
             """
             
-            # List of valid Gemini models for current SDK
-            valid_models = ['gemini-2.0-flash', 'gemini-2.5-flash']
-            res_text = None
-            last_err = None
-
-            for model_name in valid_models:
-                try:
-                    res = gemini_client.models.generate_content(
-                        model=model_name,
-                        contents=[prompt, image]
-                    )
-                    res_text = res.text
-                    break
-                except Exception as err:
-                    last_err = err
-                    continue
-
-            if res_text:
-                try:
-                    clean_text = res_text.strip().removeprefix("```json").removesuffix("```").strip()
-                    parsed_data = json.loads(clean_text)
-                    items = parsed_data if isinstance(parsed_data, list) else [parsed_data]
-                    
-                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    
-                    rows_to_add = [
-                        [
-                            timestamp,
-                            item.get("DATE", ""),
-                            item.get("INVOICE_NUM", ""),
-                            item.get("BATCH_NUM", ""),
-                            item.get("EN_NUM", ""),
-                            item.get("ALTER_QTY", ""),
-                            item.get("GOOD_QTY", ""),
-                            item.get("SHORT_QTY", "")
-                        ]
-                        for item in items
+            try:
+                # Primary model recommended by API endpoint
+                res = gemini_client.models.generate_content(
+                    model='gemini-3.6-flash',
+                    contents=[prompt, image]
+                )
+                
+                clean_text = res.text.strip().removeprefix("```json").removesuffix("```").strip()
+                parsed_data = json.loads(clean_text)
+                items = parsed_data if isinstance(parsed_data, list) else [parsed_data]
+                
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                
+                rows_to_add = [
+                    [
+                        timestamp,
+                        item.get("DATE", ""),
+                        item.get("INVOICE_NUM", ""),
+                        item.get("BATCH_NUM", ""),
+                        item.get("EN_NUM", ""),
+                        item.get("ALTER_QTY", ""),
+                        item.get("GOOD_QTY", ""),
+                        item.get("SHORT_QTY", "")
                     ]
-                    
-                    next_row = len(sheet.col_values(1)) + 1
-                    sheet.insert_rows(rows_to_add, row=next_row)
-                    
-                    st.success(f"✅ Successfully extracted and synced {len(rows_to_add)} rows to Google Sheet!")
-                    st.json(items)
-                except Exception as parse_err:
-                    st.error(f"❌ JSON Parsing Error: {parse_err}")
-            else:
-                st.error(f"❌ Processing Error: {last_err}")
+                    for item in items
+                ]
+                
+                next_row = len(sheet.col_values(1)) + 1
+                sheet.insert_rows(rows_to_add, row=next_row)
+                
+                st.success(f"✅ Successfully extracted and synced {len(rows_to_add)} rows to Google Sheet!")
+                st.json(items)
+                
+            except Exception as err:
+                err_msg = str(err)
+                if "RESOURCE_EXHAUSTED" in err_msg or "429" in err_msg:
+                    st.error("⚠️ API Daily Quota Complete! Please wait a few moments or generate a new key from Google AI Studio.")
+                else:
+                    st.error(f"❌ Processing Error: {err_msg}")
