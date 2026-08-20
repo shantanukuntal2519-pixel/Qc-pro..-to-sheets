@@ -7,7 +7,7 @@ import google.generativeai as genai
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
-# 1. Credentials Setup
+# Credentials Setup
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds_dict = json.loads(os.environ["GOOGLE_CREDENTIALS"])
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
@@ -17,8 +17,8 @@ sheet = client.open("fress inword qc").sheet1
 genai.configure(api_key=os.environ["GEMINI_API_KEY"])
 model = genai.GenerativeModel('gemini-1.5-flash')
 
-# 2. Check for images in 'images' folder
-image_files = glob.glob('images/*.[jJ][pP][gG]') + glob.glob('images/*.[pP][nN][gG]') + glob.glob('images/*.[jJ][pP][eE][gG]')
+# Search images everywhere in repo
+image_files = glob.glob('*.[jJ][pP][gG]') + glob.glob('*.[pP][nN][gG]') + glob.glob('*.[jJ][pP][eE][gG]') + glob.glob('*WhatsApp*')
 
 for img_path in image_files:
     try:
@@ -46,6 +46,5 @@ for img_path in image_files:
         
         sheet.append_row(row)
         print(f"Successfully processed: {img_path}")
-        os.remove(img_path)
     except Exception as e:
         print(f"Error processing {img_path}: {e}")
