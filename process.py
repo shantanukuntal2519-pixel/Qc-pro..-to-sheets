@@ -187,27 +187,22 @@ if uploaded_file is not None:
             res_text = None
             last_err = None
             
-            # Smart Retry Mechanism across models with delay
-            models_to_try = ['gemini-3.6-flash', 'gemini-2.5-flash']
-            
-            for model_name in models_to_try:
-                for attempt in range(3):  # 3 Attempts per model
-                    try:
-                        res = gemini_client.models.generate_content(
-                            model=model_name,
-                            contents=[prompt, image]
-                        )
-                        res_text = res.text
-                        break
-                    except Exception as err:
-                        last_err = err
-                        if "503" in str(err) or "UNAVAILABLE" in str(err):
-                            time.sleep(2)  # Wait 2 sec before retry
-                            continue
-                        else:
-                            break
-                if res_text:
+            # Robust Retry Mechanism using ONLY supported gemini-3.6-flash model
+            for attempt in range(4):
+                try:
+                    res = gemini_client.models.generate_content(
+                        model='gemini-3.6-flash',
+                        contents=[prompt, image]
+                    )
+                    res_text = res.text
                     break
+                except Exception as err:
+                    last_err = err
+                    if "503" in str(err) or "UNAVAILABLE" in str(err) or "429" in str(err):
+                        time.sleep(3)  # Wait 3 seconds before retry
+                        continue
+                    else:
+                        break
 
             if res_text:
                 try:
@@ -239,7 +234,10 @@ if uploaded_file is not None:
                 except Exception as parse_err:
                     st.error(f"❌ JSON Parsing Error: {parse_err}")
             else:
-                if "503" in str(last_err) or "UNAVAILABLE" in str(last_err):
-                    st.warning("⚠️ Google Gemini server busy hain. Kripya 5 seconds baad 'PROCESS & SYNC' button dobara dabayein.")
+                err_str = str(last_err)
+                if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+                    st.error("⚠️ API Daily Quota Exceeded! Please wait a few minutes or update your API key in Streamlit Secrets.")
+                elif "503" in err_str or "UNAVAILABLE" in err_str:
+                    st.warning("⚠️ Google servers overloaded. Please click 'PROCESS & SYNC' again in 5 seconds.")
                 else:
-                    st.error(f"❌ Processing Error: {last_err}")
+                    st.error(f"❌ Processing Error: {err_str}")
