@@ -3,7 +3,11 @@ import json
 import glob
 from datetime import datetime
 from PIL import Image
-import google.generativeai as genai
+# Purana (isey hata dein):
+# import google.generativeai as genai
+
+# Naya (ye likhein):
+from google import genai
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
@@ -14,9 +18,7 @@ creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 client = gspread.authorize(creds)
 sheet = client.open("fress inword qc").sheet1
 
-genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-model = genai.GenerativeModel('gemini-1.5-flash')
-
+gemini_client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 # Search images everywhere in repo
 image_files = glob.glob('*.[jJ][pP][gG]') + glob.glob('*.[pP][nN][gG]') + glob.glob('*.[jJ][pP][eE][gG]') + glob.glob('*WhatsApp*')
 
@@ -28,7 +30,10 @@ for img_path in image_files:
         {"DATE": "YYYY-MM-DD", "INVOICE_NUM": "", "BATCH_NUM": "", "EN_NUM": "", "ALTER_QTY": "", "GOOD_QTY": "", "SHORT_QTY": ""}
         Return ONLY raw JSON, no markdown codeblocks.
         """
-        response = model.generate_content([prompt, image])
+        response = gemini_client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=[prompt, image]
+        )
         clean_text = response.text.strip().replace("```json", "").replace("```", "")
         data = json.loads(clean_text)
         
