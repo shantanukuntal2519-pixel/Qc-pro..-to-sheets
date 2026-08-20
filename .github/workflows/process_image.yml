@@ -3,7 +3,9 @@ name: Process Image to Google Sheet
 on:
   push:
     paths:
-      - 'images/**'
+      - '**.jpg'
+      - '**.jpeg'
+      - '**.png'
 
 jobs:
   process:
