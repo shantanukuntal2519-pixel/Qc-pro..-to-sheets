@@ -7,57 +7,131 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import streamlit as st
 
-# Page Configuration
-st.set_page_config(page_title="Delhivery Smart QC Workstation", page_icon="📦", layout="wide")
+st.set_page_config(page_title="Delhivery Smart QC Workstation", page_icon="📦", layout="centered")
 
-# Custom CSS for Delhivery Branding
+# Custom CSS for Exact UI Matching
 st.markdown("""
     <style>
-    .main-header {
-        background-color: #000000;
-        padding: 15px;
-        border-radius: 8px;
-        color: white;
+    /* Background Page Styling */
+    .stApp {
+        background-color: #F2F5F9;
+    }
+    .block-container {
+        padding-top: 1.5rem;
+        padding-bottom: 2rem;
+        max-width: 720px;
+    }
+    
+    /* Main Workstation Card */
+    .qc-card {
+        background-color: #FFFFFF;
+        border-radius: 16px;
+        padding: 24px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        border: 1px solid #E6ECF1;
         margin-bottom: 20px;
     }
-    .main-title {
-        color: #E31E24;
-        font-weight: bold;
-        font-size: 28px;
-        margin: 0;
+    
+    /* Top Header Section */
+    .header-container {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #EEF2F5;
+        padding-bottom: 16px;
+        margin-bottom: 20px;
     }
-    .sub-title {
+    .brand-title {
+        color: #D3122A;
+        font-size: 26px;
+        font-weight: 800;
+        letter-spacing: -0.5px;
+        display: inline-block;
+        margin-right: 8px;
+    }
+    .badge-tag {
+        background-color: #0A192F;
         color: #FFFFFF;
-        font-size: 16px;
-        margin: 0;
+        font-size: 10px;
+        font-weight: 700;
+        padding: 4px 8px;
+        border-radius: 12px;
+        letter-spacing: 0.5px;
+        vertical-align: middle;
     }
-    .status-card {
-        background-color: #F8F9FA;
-        padding: 12px;
-        border-left: 4px solid #E31E24;
-        border-radius: 4px;
-        margin-bottom: 20px;
+    .sub-tagline {
+        color: #6B7C93;
+        font-size: 12px;
+        margin-top: 2px;
+    }
+    
+    /* Operator Profile Chip */
+    .operator-chip {
+        background-color: #F8FAFC;
+        border: 1px solid #E2E8F0;
+        border-radius: 25px;
+        padding: 6px 14px 6px 8px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .avatar-circle {
+        background-color: #D3122A;
+        color: white;
+        font-weight: bold;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+    }
+    .operator-name {
+        font-weight: 700;
+        font-size: 13px;
+        color: #1E293B;
+        line-height: 1.1;
+    }
+    .operator-role {
+        font-size: 11px;
+        color: #64748B;
+    }
+    
+    /* Section Title & Status */
+    .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+    }
+    .section-title {
+        font-weight: 800;
+        font-size: 16px;
+        color: #0F172A;
+    }
+    .status-ready {
+        color: #16A34A;
+        font-weight: 600;
+        font-size: 13px;
+    }
+    
+    /* Custom Styling for Streamlit Buttons & Dropdowns */
+    div.stButton > button:first-child {
+        background-color: #C20E23 !important;
+        color: white !important;
+        font-weight: 700 !important;
+        font-size: 15px !important;
+        border-radius: 8px !important;
+        height: 48px !important;
+        width: 100% !important;
+        border: none !important;
+        box-shadow: 0 4px 12px rgba(194, 14, 35, 0.25) !important;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# Top Banner Header
-st.markdown("""
-    <div class="main-header">
-        <div class="main-title">DELHIVERY</div>
-        <div class="sub-title">SMART QC WORKSTATION</div>
-        <small>Auto Invoice Image Extractor & Google Sheets Sync Engine</small>
-    </div>
-""", unsafe_allow_html=True)
-
-# Operator Status Bar
-st.markdown("""
-    <div class="status-card">
-        <b>Active Operator:</b> Shantanu | QC Station Operator <br>
-        <small>System automatically compresses invoice images, extracts barcode metadata, and appends rows directly to the target Google Spreadsheet in real-time.</small>
-    </div>
-""", unsafe_allow_html=True)
-
+# Google Sheets Setup
 @st.cache_resource
 def get_gsheet():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -73,26 +147,48 @@ def get_gemini():
 gemini_client = get_gemini()
 sheet = get_gsheet()
 
-# Form Inputs Layout
-st.subheader("1. ORDER PHOTO CAPTURE & UPLOAD")
+# Header HTML
+st.markdown("""
+<div class="qc-card">
+    <div class="header-container">
+        <div>
+            <div>
+                <span class="brand-title">DELHIVERY</span>
+                <span class="badge-tag">SMART QC WORKSTATION</span>
+            </div>
+            <div class="sub-tagline">Auto Invoice Image Extractor & Google Sheets Sync Engine</div>
+        </div>
+        <div class="operator-chip">
+            <div class="avatar-circle">S</div>
+            <div>
+                <div class="operator-name">Shantanu</div>
+                <div class="operator-role">QC Station Operator</div>
+            </div>
+        </div>
+    </div>
+    <div class="section-header">
+        <div class="section-title">1. ORDER PHOTO CAPTURE & UPLOAD</div>
+        <div class="status-ready">● Ready for Scan</div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+# Image Uploader Section
+uploaded_file = st.file_uploader("Upload Order / Invoice Photo (Drag & drop photo here or browse)", type=["jpg", "jpeg", "png"])
 
 col1, col2 = st.columns(2)
-
 with col1:
     target_tab = st.selectbox("Target Google Sheet Tab", ["Daily_QC_Orders_2026", "Form_Responses"])
-    inspection_cat = st.selectbox("Inspection Category", ["Inbound Package QC", "Outbound Package QC", "Return Order QC"])
-
 with col2:
-    uploaded_file = st.file_uploader("Upload Order / Invoice Photo", type=["jpg", "jpeg", "png"], help="Drag & drop order photo here, or browse from local storage")
+    inspection_cat = st.selectbox("Inspection Category", ["Inbound Package QC", "Outbound Package QC", "Return Order QC"])
 
 if uploaded_file is not None:
     image = Image.open(uploaded_file)
     image.thumbnail((1024, 1024))
+    st.image(image, caption="Uploaded Photo Preview", use_container_width=True)
     
-    st.image(image, caption="Uploaded Invoice Photo", use_container_width=True)
-    
-    if st.button("PROCESS & SYNC TO GOOGLE SHEET", type="primary"):
-        with st.spinner("Extracting data & syncing with Google Sheet..."):
+    if st.button("⚡ PROCESS & SYNC TO GOOGLE SHEET"):
+        with st.spinner("Processing & Syncing data to Google Sheet..."):
             try:
                 prompt = """
                 Extract all lines into JSON ARRAY:
