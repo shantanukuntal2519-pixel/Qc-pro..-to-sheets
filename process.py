@@ -93,26 +93,15 @@ if uploaded_file is not None:
             Return ONLY raw JSON, no markdown codeblocks.
             """
             
-            response = None
-            models_to_try = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.0-flash-lite']
-            
-            last_err = ""
-            for model_name in models_to_try:
-                try:
-                    response = client.models.generate_content(
-                        model=model_name,
-                        contents=[image, prompt_text]
-                    )
-                    if response and response.text:
-                        break
-                except Exception as e:
-                    last_err = str(e)
-                    time.sleep(1)
-                    continue
-            
             try:
+                # Latest active model requested by API
+                response = client.models.generate_content(
+                    model='gemini-3.5-flash-lite',
+                    contents=[image, prompt_text]
+                )
+
                 if not response or not response.text:
-                    raise Exception(f"API Error: {last_err if last_err else 'No response'}")
+                    raise Exception("No response received from Gemini API.")
 
                 res_text = response.text.strip()
                 clean_text = res_text.removeprefix("```json").removesuffix("```").strip()
