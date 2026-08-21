@@ -10,7 +10,7 @@ from google import genai
 
 st.set_page_config(page_title="Delhivery Smart QC Workstation", page_icon="📦", layout="centered")
 
-# Custom CSS for UI Matching
+# Custom CSS
 st.markdown("""
     <style>
     .stApp { background-color: #F2F5F9; }
@@ -42,11 +42,11 @@ def get_gsheet():
 
 sheet = get_gsheet()
 
-# Gemini SDK Setup (Secrets se Key lega)
+# Gemini SDK Setup
 api_key = os.environ.get("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY")
 client = genai.Client(api_key=api_key)
 
-# Header HTML
+# Header
 st.markdown("""
 <div class="qc-card">
     <div class="header-container">
@@ -93,12 +93,32 @@ if uploaded_file is not None:
             Return ONLY raw JSON, no markdown codeblocks.
             """
             
+            # Retry system for 503 Overload Errors
+            response = None
+            models_to_try = ['gemini-2.5-flash', 'gemini-1.5-flash']
+            
+            for model_name in models_to_try:
+                for attempt in range(3):
+                    try:
+                        response = client.models.generate_content(
+                            model=model_name,
+                            contents=[image, prompt_text]
+                        )
+                        if response and response.text:
+                            break
+                    except Exception as e:
+                        if "503" in str(e) or "UNAVAILABLE" in str(e):
+                            time.sleep(2)  # Wait 2 seconds and retry
+                            continue
+                        else:
+                            break
+                if response and response.text:
+                    break
+            
             try:
-                response = client.models.generate_content(
-                    model='gemini-3.6-flash',
-                    contents=[image, prompt_text]
-                )
-                
+                if not response or not response.text:
+                    raise Exception("Server busy. Please click the button again.")
+
                 res_text = response.text.strip()
                 clean_text = res_text.removeprefix("```json").removesuffix("```").strip()
                 parsed_data = json.loads(clean_text)
