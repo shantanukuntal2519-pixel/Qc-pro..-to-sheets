@@ -42,7 +42,7 @@ def get_gsheet():
 
 sheet = get_gsheet()
 
-# Gemini SDK Setup (Environment variable / Streamlit secrets se key lega)
+# Gemini SDK Setup (Secrets se Key lega)
 api_key = os.environ.get("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY")
 client = genai.Client(api_key=api_key)
 
@@ -94,11 +94,10 @@ if uploaded_file is not None:
             """
             
             try:
-                # Direct Gemini API Call using official SDK
-response = client.models.generate_content(
-    model='gemini-3.6-flash',
-    contents=[image, prompt_text]
-)
+                response = client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=[image, prompt_text]
+                )
                 
                 res_text = response.text.strip()
                 clean_text = res_text.removeprefix("```json").removesuffix("```").strip()
