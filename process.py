@@ -46,7 +46,7 @@ sheet = get_gsheet()
 api_key = os.environ.get("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY")
 client = genai.Client(api_key=api_key)
 
-# Header
+# Header HTML
 st.markdown("""
 <div class="qc-card">
     <div class="header-container">
@@ -93,31 +93,26 @@ if uploaded_file is not None:
             Return ONLY raw JSON, no markdown codeblocks.
             """
             
-            # Retry system for 503 Overload Errors
             response = None
-            models_to_try = ['gemini-2.5-flash', 'gemini-1.5-flash']
+            models_to_try = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.0-flash-lite']
             
+            last_err = ""
             for model_name in models_to_try:
-                for attempt in range(3):
-                    try:
-                        response = client.models.generate_content(
-                            model=model_name,
-                            contents=[image, prompt_text]
-                        )
-                        if response and response.text:
-                            break
-                    except Exception as e:
-                        if "503" in str(e) or "UNAVAILABLE" in str(e):
-                            time.sleep(2)  # Wait 2 seconds and retry
-                            continue
-                        else:
-                            break
-                if response and response.text:
-                    break
+                try:
+                    response = client.models.generate_content(
+                        model=model_name,
+                        contents=[image, prompt_text]
+                    )
+                    if response and response.text:
+                        break
+                except Exception as e:
+                    last_err = str(e)
+                    time.sleep(1)
+                    continue
             
             try:
                 if not response or not response.text:
-                    raise Exception("Server busy. Please click the button again.")
+                    raise Exception(f"API Error: {last_err if last_err else 'No response'}")
 
                 res_text = response.text.strip()
                 clean_text = res_text.removeprefix("```json").removesuffix("```").strip()
