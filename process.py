@@ -1,14 +1,12 @@
 import os
 import json
 import time
-import base64
-import requests
 from datetime import datetime
 from PIL import Image
-import io
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import streamlit as st
+from google import genai
 
 st.set_page_config(page_title="Delhivery Smart QC Workstation", page_icon="📦", layout="centered")
 
@@ -44,22 +42,9 @@ def get_gsheet():
 
 sheet = get_gsheet()
 
-# Keys list fallback
-RAW_KEYS = [
-    "QVEuQWI4Uk42S0RIUE1NaXc0VjdleEJGcmVOYkZxejdxdFR1R25TS1pVc0UtdF9rNWpPOXc=",
-    "QVEuQWI4Uk42S3VDRlNLUi1qUTA3TXdqSHhRazNxTUhqN2dOOC1JbE9OaW5uUDJzQ0YyMUE=",
-    "QVEuQWI4Uk42SldFcWZqN1pvMFlMcEFTU0dsZVc1NWNyZGo4aGpsWnJ6ek8zX2RsRVJSZHc=",
-    "QVEuQWI4Uk42SWYyZjhmUFdqczdXMWtPdzBncEVGR1VTREprZnFEYS13UGlVYmJaOVd3UQ==",
-    "QVEuQWI4Uk42TGNfLW80RlVndWY0dndYcGJ6cGY3RGVqRGVwMWs5T1BfSmRSNDJMcVVZM3c=",
-    "QVEuQWI4Uk42SURWdUdpRWF6TGFteG5jTVlaTVNnUXBuMGctQmxnQ3ZEcHZKeC12OFhVdHc=",
-    "QVEuQWI4Uk42TFF4Mk5GcDBNNzg1ZlRSSGdTOG5Oa2NVNERoa2RnTC1xazNIbzFPVVVVZw=="
-]
-
-SECRET_KEY = os.environ.get("GEMINI_API_KEY")
-if SECRET_KEY:
-    API_KEYS = [SECRET_KEY] + [base64.b64decode(k).decode('utf-8') for k in RAW_KEYS]
-else:
-    API_KEYS = [base64.b64decode(k).decode('utf-8') for k in RAW_KEYS]
+# Gemini SDK Setup (Environment variable / Streamlit secrets se key lega)
+api_key = os.environ.get("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY")
+client = genai.Client(api_key=api_key)
 
 # Header HTML
 st.markdown("""
@@ -105,87 +90,42 @@ if uploaded_file is not None:
             prompt_text = """
             Extract all lines into JSON ARRAY:
             [{"DATE": "", "INVOICE_NUM": "", "BATCH_NUM": "", "EN_NUM": "", "ALTER_QTY": "", "GOOD_QTY": "", "SHORT_QTY": ""}]
-            Return ONLY raw JSON, no markdown.
+            Return ONLY raw JSON, no markdown codeblocks.
             """
             
-            # Convert PIL image to base64
-            buffered = io.BytesIO()
-            image.save(buffered, format="JPEG")
-            img_bytes = buffered.getvalue()
-            img_b64 = base64.b64encode(img_bytes).decode('utf-8')
-            
-            res_text = None
-            last_err = None
-            used_key_index = None
-
-            # Direct REST API Payload for Enterprise/Access Tokens
-            payload = {
-                "contents": [
-                    {
-                        "parts": [
-                            {"text": prompt_text},
-                            {
-                                "inline_data": {
-                                    "mime_type": "image/jpeg",
-                                    "data": img_b64
-                                }
-                            }
-                        ]
-                    }
-                ]
-            }
-
-            for idx, key in enumerate(API_KEYS):
-                try:
-                    # 1. Try URL Query Parameter
-                    url_param = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={key}"
-                    resp = requests.post(url_param, json=payload, timeout=30)
-                    
-                    if resp.status_code != 200:
-                        # 2. Try Authorization Bearer Header (for AQ.Ab8RN6 access tokens)
-                        url_header = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
-                        headers = {"Authorization": f"Bearer {key}"}
-                        resp = requests.post(url_header, headers=headers, json=payload, timeout=30)
-                    
-                    if resp.status_code == 200:
-                        res_json = resp.json()
-                        res_text = res_json['candidates'][0]['content']['parts'][0]['text']
-                        used_key_index = idx + 1
-                        break
-                    else:
-                        last_err = f"HTTP {resp.status_code}: {resp.text}"
-                except Exception as err:
-                    last_err = str(err)
-                    continue
-
-            if res_text:
-                try:
-                    clean_text = res_text.strip().removeprefix("```json").removesuffix("```").strip()
-                    parsed_data = json.loads(clean_text)
-                    items = parsed_data if isinstance(parsed_data, list) else [parsed_data]
-                    
-                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    
-                    rows_to_add = [
-                        [
-                            timestamp,
-                            item.get("DATE", ""),
-                            item.get("INVOICE_NUM", ""),
-                            item.get("BATCH_NUM", ""),
-                            item.get("EN_NUM", ""),
-                            item.get("ALTER_QTY", ""),
-                            item.get("GOOD_QTY", ""),
-                            item.get("SHORT_QTY", "")
-                        ]
-                        for item in items
+            try:
+                # Direct Gemini API Call using official SDK
+                response = client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=[image, prompt_text]
+                )
+                
+                res_text = response.text.strip()
+                clean_text = res_text.removeprefix("```json").removesuffix("```").strip()
+                parsed_data = json.loads(clean_text)
+                items = parsed_data if isinstance(parsed_data, list) else [parsed_data]
+                
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                
+                rows_to_add = [
+                    [
+                        timestamp,
+                        item.get("DATE", ""),
+                        item.get("INVOICE_NUM", ""),
+                        item.get("BATCH_NUM", ""),
+                        item.get("EN_NUM", ""),
+                        item.get("ALTER_QTY", ""),
+                        item.get("GOOD_QTY", ""),
+                        item.get("SHORT_QTY", "")
                     ]
-                    
-                    next_row = len(sheet.col_values(1)) + 1
-                    sheet.insert_rows(rows_to_add, row=next_row)
-                    
-                    st.success(f"✅ Successfully extracted and synced {len(rows_to_add)} rows using Key #{used_key_index}!")
-                    st.json(items)
-                except Exception as parse_err:
-                    st.error(f"❌ JSON Parsing Error: {parse_err}")
-            else:
-                st.error(f"❌ Processing Error: {last_err}")
+                    for item in items
+                ]
+                
+                next_row = len(sheet.col_values(1)) + 1
+                sheet.insert_rows(rows_to_add, row=next_row)
+                
+                st.success(f"✅ Successfully extracted and synced {len(rows_to_add)} rows!")
+                st.json(items)
+                
+            except Exception as err:
+                st.error(f"❌ Processing Error: {err}")
